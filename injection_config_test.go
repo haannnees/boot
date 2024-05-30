@@ -50,8 +50,10 @@ func TestBootWithWireConfig(t *testing.T) {
 	t17 := &envTestStruct17{}
 	t18 := &envTestStruct18{}
 	t19 := &envTestStruct19{}
+	t20 := &envTestStruct20{}
+	t21 := &envTestStruct21{}
 	controls := []Component{
-		t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19,
+		t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21,
 	}
 
 	registry := newRegistry()
@@ -242,6 +244,28 @@ func TestBootWithWireConfig(t *testing.T) {
 			controller: t19,
 			setup:      func() {},
 			err:        "Error field contains unparsable tag  <envTestStruct19.B `config,key:UNKNOWN:unsupported`>",
+		},
+		{
+			name:       "secret tag with default",
+			controller: t20,
+			expected: &envTestStruct20{
+				C: "d20",
+			},
+			err: " ",
+		},
+		{
+			name:       "secret tag without default",
+			controller: t21,
+			expected: &envTestStruct21{
+				B: 1,
+			},
+			setup: func() {
+				err := os.Setenv("t21", "1")
+				if err != nil {
+					panic("failed to set environment variable")
+				}
+			},
+			err: " ",
 		},
 	}
 	for _, test := range tests {
@@ -523,3 +547,27 @@ type envTestStruct19 struct {
 }
 
 func (t envTestStruct19) Init() error { return nil }
+
+//nolint:unused // for testing purpose nolint:unused
+type envTestStruct20 struct {
+	a int
+	B int
+	C string `boot:"config,key:t20,default:'d20',secret"`
+	d any
+	e []any
+	F bool
+}
+
+func (t envTestStruct20) Init() error { return nil }
+
+//nolint:unused // for testing purpose nolint:unused
+type envTestStruct21 struct {
+	a int
+	B int `boot:"config,key:t21,secret"`
+	C string
+	d any
+	e []any
+	F bool
+}
+
+func (t envTestStruct21) Init() error { return nil }

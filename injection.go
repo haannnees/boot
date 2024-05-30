@@ -39,13 +39,14 @@ type DependencyInjectionError struct {
 }
 
 const (
-	fieldTag            = "boot" // this key should follow the package name
-	fieldTagConfig      = "config"
-	fieldTagWire        = "wire"
-	fieldTagName        = "name"
-	fieldTagWireKey     = "key"
-	fieldTagWirePanic   = "panic"
-	fieldTagWireDefault = "default"
+	fieldTag             = "boot" // this key should follow the package name
+	fieldTagConfig       = "config"
+	fieldTagWire         = "wire"
+	fieldTagName         = "name"
+	fieldTagWireKey      = "key"
+	fieldTagWirePanic    = "panic"
+	fieldTagWireDefault  = "default"
+	fieldTagConfigSecret = "secret"
 )
 
 const (
@@ -194,12 +195,16 @@ func processConfiguration(reflectedComponent reflect.Value, field reflect.Struct
 	panicOnFail := false
 	defaultCfg := ""
 	hasDefault := false
+	isSecret := false
 	if tag.hasOption(fieldTagWirePanic) {
 		panicOnFail = true
 	}
 	if tag.hasOption(fieldTagWireDefault) {
 		defaultCfg = tag.options[fieldTagWireDefault]
 		hasDefault = true
+	}
+	if tag.hasOption(fieldTagConfigSecret) {
+		isSecret = true
 	}
 	if tag.hasOption(fieldTagWireKey) {
 		if cfgKey := tag.options[fieldTagWireKey]; len(cfgKey) > 0 {
@@ -208,7 +213,7 @@ func processConfiguration(reflectedComponent reflect.Value, field reflect.Struct
 					cfgValue = defaultCfg
 				}
 				if fieldValue.CanSet() {
-					err := processConfigValue(reflectedComponent, field, fieldValue, cfgValue, cfgKey, panicOnFail)
+					err := processConfigValue(reflectedComponent, field, fieldValue, cfgValue, cfgKey, panicOnFail, isSecret)
 					if err != nil {
 						return err
 					}
@@ -234,13 +239,13 @@ func processConfiguration(reflectedComponent reflect.Value, field reflect.Struct
 	return nil
 }
 
-func processConfigValue(reflectedComponent reflect.Value, field reflect.StructField, fieldValue reflect.Value, cfgValue string, cfgKey string, panicOnFail bool) error {
-	processConfigString(field, fieldValue, cfgValue, cfgKey)
-	err := processConfigInt(field, reflectedComponent, fieldValue, cfgValue, panicOnFail, cfgKey)
+func processConfigValue(reflectedComponent reflect.Value, field reflect.StructField, fieldValue reflect.Value, cfgValue string, cfgKey string, panicOnFail bool, isSecret bool) error {
+	processConfigString(field, fieldValue, cfgValue, cfgKey, isSecret)
+	err := processConfigInt(field, reflectedComponent, fieldValue, cfgValue, panicOnFail, cfgKey, isSecret)
 	if err != nil {
 		return err
 	}
-	err = processConfigBool(field, reflectedComponent, fieldValue, cfgValue, panicOnFail, cfgKey)
+	err = processConfigBool(field, reflectedComponent, fieldValue, cfgValue, panicOnFail, cfgKey, isSecret)
 	if err != nil {
 		return err
 	}
@@ -263,7 +268,7 @@ func getConfig(cfgKey string) (string, bool) {
 	return os.LookupEnv(cfgKey)
 }
 
-func processConfigBool(field reflect.StructField, componentValue reflect.Value, fieldValue reflect.Value, cfgValue string, panicOnFail bool, cfg string) error {
+func processConfigBool(field reflect.StructField, componentValue reflect.Value, fieldValue reflect.Value, cfgValue string, panicOnFail bool, cfg string, isSecret bool) error {
 	if field.Type.Name() == "bool" {
 		if !fieldValue.Bool() {
 			boolValue, err := strconv.ParseBool(cfgValue)
@@ -277,13 +282,17 @@ func processConfigBool(field reflect.StructField, componentValue reflect.Value, 
 				Logger.Warn.Printf("failed to parse configuration value %s as boolean: %s\n", cfgValue, err)
 			}
 			fieldValue.SetBool(boolValue)
-			Logger.Debug.Printf("setting boolean configuration %s=%s\n", cfg, cfgValue)
+			if !isSecret {
+				Logger.Debug.Printf("setting boolean configuration %s=%s\n", cfg, cfgValue)
+			} else {
+				Logger.Debug.Printf("setting secret boolean configuration %s", cfg)
+			}
 		}
 	}
 	return nil
 }
 
-func processConfigInt(field reflect.StructField, componentValue reflect.Value, fieldValue reflect.Value, cfgValue string, panicOnFail bool, cfg string) error {
+func processConfigInt(field reflect.StructField, componentValue reflect.Value, fieldValue reflect.Value, cfgValue string, panicOnFail bool, cfg string, isSecret bool) error {
 	if field.Type.Name() == "int" {
 		if fieldValue.Int() == 0 {
 			const bitSize = 64
@@ -299,17 +308,25 @@ func processConfigInt(field reflect.StructField, componentValue reflect.Value, f
 				Logger.Warn.Printf("failed to parse configuration value %s as integer: %s\n", cfgValue, err)
 			}
 			fieldValue.SetInt(intValue)
-			Logger.Debug.Printf("setting integer configuration %s=%s\n", cfg, cfgValue)
+			if !isSecret {
+				Logger.Debug.Printf("setting integer configuration %s=%s\n", cfg, cfgValue)
+			} else {
+				Logger.Debug.Printf("setting secret integer configuration %s", cfg)
+			}
 		}
 	}
 	return nil
 }
 
-func processConfigString(field reflect.StructField, fieldValue reflect.Value, cfgValue string, cfg string) {
+func processConfigString(field reflect.StructField, fieldValue reflect.Value, cfgValue string, cfg string, isSecret bool) {
 	if field.Type.Name() == "string" {
 		if fieldValue.String() == "" {
 			fieldValue.SetString(cfgValue)
-			Logger.Debug.Printf("setting string configuration %s=%s\n", cfg, cfgValue)
+			if !isSecret {
+				Logger.Debug.Printf("setting string configuration %s=%s\n", cfg, cfgValue)
+			} else {
+				Logger.Debug.Printf("setting secret string configuration %s", cfg)
+			}
 		}
 	}
 }
